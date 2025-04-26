@@ -68,6 +68,10 @@ async def send_log(guild, title: str, description: str, color=discord.Color.blur
             )
             embed.set_footer(text="Système de logs")
             await logs_channel.send(embed=embed)
+        else:
+            print("Erreur : Le salon des logs n'a pas été trouvé.")
+    else:
+        print("Erreur : Aucun salon de logs configuré.")
 
 # --- Système de Tickets ---
 class CloseTicketView(View):
