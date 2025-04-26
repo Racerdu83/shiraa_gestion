@@ -188,4 +188,4 @@ async def on_message_delete(message):
 
 # --- Lancer le bot ---
 
-bot.run("TON_TOKEN_ICI")
+bot.run("MTM2NTcwOTU1MTU0NTg3NjU0MA.GQDSFZ.-sAXnp31-vjnxWnVRF5AP-V3Rmfk5XaGDvmSJA")
