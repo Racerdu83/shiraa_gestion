@@ -116,28 +116,13 @@ async def open_ticket(interaction: discord.Interaction):
     await send_log(interaction.guild, f"🎛️ Création de ticket", f"Ticket **{ticket_channel.name}** créé par {interaction.user.mention}", color=discord.Color.green())
     await interaction.response.send_message(f"Votre ticket a été créé : {ticket_channel.mention}", ephemeral=True)
 
-# --- Commandes ---
-
-@bot.event
-async def on_ready():
-    await bot.tree.sync()
-    print(f"Connecté en tant que {bot.user}")
-
-# Configuration des vocaux temporaires
-@bot.tree.command(name="setup-vocaux", description="Configurer le salon de création des vocaux temporaires")
-@app_commands.describe(channel="Salon vocal pour la création des vocaux temporaires")
-async def setup_vocaux(interaction: discord.Interaction, channel: discord.VoiceChannel):
-    global CREATE_VOCAL_CHANNEL_ID
-    CREATE_VOCAL_CHANNEL_ID = channel.id
-    save_vocal_channel(CREATE_VOCAL_CHANNEL_ID)
-    await interaction.response.send_message(f"Le salon vocal de création des vocaux temporaires est maintenant {channel.mention}.", ephemeral=True)
-
-# Fonction pour créer un salon vocal temporaire
+# --- Gestion des Vocaux Temporaires ---
 @bot.event
 async def on_voice_state_update(member, before, after):
     if not CREATE_VOCAL_CHANNEL_ID:
         return
 
+    # Lorsque l'utilisateur rejoint le salon de création
     if after.channel and after.channel.id == CREATE_VOCAL_CHANNEL_ID:
         await create_temp_voice_channel(member)
 
@@ -156,10 +141,52 @@ async def create_temp_voice_channel(member):
     def check_empty_channel(before, after):
         return before.channel == new_channel and after.channel is None and len(new_channel.members) == 0
 
+    # Attendre que le salon soit vide
     await bot.wait_for('voice_state_update', check=check_empty_channel)
     await new_channel.delete()
 
-# --- Commandes Admin ---
+# --- Commandes de Modération ---
+@bot.tree.command(name="mute", description="Muet un membre")
+@app_commands.describe(member="Membre à mute")
+async def mute(interaction: discord.Interaction, member: discord.Member):
+    if not interaction.user.guild_permissions.moderate_members:
+        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+        return
+    await member.edit(mute=True)
+    await interaction.response.send_message(f"{member.mention} a été mis en sourdine.", ephemeral=True)
+    await send_log(interaction.guild, "🔇 Mute", f"{member.mention} a été muet par {interaction.user.mention}", color=discord.Color.orange())
+
+@bot.tree.command(name="unmute", description="Démute un membre")
+@app_commands.describe(member="Membre à démute")
+async def unmute(interaction: discord.Interaction, member: discord.Member):
+    if not interaction.user.guild_permissions.moderate_members:
+        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+        return
+    await member.edit(mute=False)
+    await interaction.response.send_message(f"{member.mention} a été démute.", ephemeral=True)
+    await send_log(interaction.guild, "🔊 Unmute", f"{member.mention} a été démute par {interaction.user.mention}", color=discord.Color.green())
+
+@bot.tree.command(name="kick", description="Expulse un membre")
+@app_commands.describe(member="Membre à expulser", reason="Raison de l'expulsion")
+async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "Aucune raison"):
+    if interaction.user.guild_permissions.kick_members:
+        await member.kick(reason=reason)
+        await interaction.response.send_message(f"{member.mention} a été expulsé.", ephemeral=True)
+        await send_log(interaction.guild, "👢 Expulsion", f"{member.mention} expulsé par {interaction.user.mention} pour : {reason}", color=discord.Color.red())
+    else:
+        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+
+@bot.tree.command(name="ban", description="Bannir un membre")
+@app_commands.describe(member="Membre à bannir", reason="Raison du bannissement")
+async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "Aucune raison"):
+    if interaction.user.guild_permissions.ban_members:
+        await member.ban(reason=reason)
+        await interaction.response.send_message(f"{member.mention} a été banni.", ephemeral=True)
+        await send_log(interaction.guild, "🔨 Bannissement", f"{member.mention} banni par {interaction.user.mention} pour : {reason}", color=discord.Color.red())
+    else:
+        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+
+# --- Commandes de Configuration des Logs et Tickets ---
 @bot.tree.command(name="config", description="Configurer le système de tickets")
 @app_commands.describe(category="Catégorie pour les tickets", support_role="Rôle support")
 async def config(interaction: discord.Interaction, category: discord.CategoryChannel, support_role: discord.Role):
@@ -186,69 +213,9 @@ async def ticket(interaction: discord.Interaction):
 @bot.tree.command(name="setup-ticket", description="Envoyer un panneau pour créer des tickets")
 @app_commands.describe(channel="Salon", message="Message personnalisé")
 async def setup_ticket(interaction: discord.Interaction, channel: discord.TextChannel, message: str):
-    if interaction.user.guild_permissions.administrator:
-        embed = discord.Embed(
-            title="🎟️ Support Tickets",
-            description=message,
-            color=discord.Color.green()
-        )
-        embed.set_footer(text="Cliquez sur le bouton pour ouvrir un ticket.")
-
-        view = CreateTicketView()
-
-        await channel.send(embed=embed, view=view)
-        await interaction.response.send_message(f"Panneau envoyé dans {channel.mention} ✅", ephemeral=True)
-    else:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-
-# --- Commandes de Modération ---
-
-@bot.tree.command(name="warn", description="Avertir un membre")
-@app_commands.describe(member="Membre à avertir", reason="Raison de l'avertissement")
-async def warn(interaction: discord.Interaction, member: discord.Member, reason: str):
-    if not interaction.user.guild_permissions.moderate_members:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-        return
-    warns_data.setdefault(str(member.id), []).append({"reason": reason, "moderator": str(interaction.user)})
-    save_warns(warns_data)
-    await interaction.response.send_message(f"{member.mention} a été averti pour : {reason}", ephemeral=True)
-    await send_log(interaction.guild, "⚠️ Avertissement", f"{member.mention} averti par {interaction.user.mention} pour : {reason}")
-
-@bot.tree.command(name="warnings", description="Voir les avertissements d'un membre")
-@app_commands.describe(member="Membre à consulter")
-async def warnings(interaction: discord.Interaction, member: discord.Member):
-    user_warns = warns_data.get(str(member.id), [])
-    if not user_warns:
-        await interaction.response.send_message(f"{member.mention} n'a aucun avertissement.", ephemeral=True)
-        return
-    embed = discord.Embed(title=f"Avertissements de {member.display_name}", color=discord.Color.orange())
-    for i, warn in enumerate(user_warns, 1):
-        embed.add_field(name=f"Avertissement {i}", value=f"Raison : {warn['reason']}\nModérateur : {warn['moderator']}", inline=False)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-@bot.tree.command(name="unwarn", description="Retirer un avertissement")
-@app_commands.describe(member="Membre", index="Numéro de l'avertissement (1, 2, etc.)")
-async def unwarn(interaction: discord.Interaction, member: discord.Member, index: int):
-    if not interaction.user.guild_permissions.moderate_members:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-        return
-    user_warns = warns_data.get(str(member.id), [])
-    if 0 < index <= len(user_warns):
-        user_warns.pop(index - 1)
-        save_warns(warns_data)
-        await interaction.response.send_message(f"Avertissement {index} retiré pour {member.mention}.", ephemeral=True)
-    else:
-        await interaction.response.send_message("Indice invalide.", ephemeral=True)
-
-@bot.tree.command(name="ban", description="Bannir un membre")
-@app_commands.describe(member="Membre à bannir", reason="Raison du bannissement")
-async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "Aucune raison"):
-    if interaction.user.guild_permissions.ban_members:
-        await member.ban(reason=reason)
-        await interaction.response.send_message(f"{member.mention} a été banni.", ephemeral=True)
-        await send_log(interaction.guild, "🔨 Bannissement", f"{member.mention} banni par {interaction.user.mention} pour : {reason}")
-    else:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+    view = CreateTicketView()
+    await channel.send(message, view=view)
+    await interaction.response.send_message(f"Panneau de ticket envoyé dans {channel.mention}", ephemeral=True)
 
 # Lancement du bot
 bot.run('MTM2NTcwOTU1MTU0NTg3NjU0MA.GQDSFZ.-sAXnp31-vjnxWnVRF5AP-V3Rmfk5XaGDvmSJA')
