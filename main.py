@@ -250,42 +250,5 @@ async def ban(interaction: discord.Interaction, member: discord.Member, reason: 
     else:
         await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
 
-@bot.tree.command(name="kick", description="Expulser un membre")
-@app_commands.describe(member="Membre à expulser", reason="Raison de l'expulsion")
-async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "Aucune raison"):
-    if interaction.user.guild_permissions.kick_members:
-        await member.kick(reason=reason)
-        await interaction.response.send_message(f"{member.mention} a été expulsé.", ephemeral=True)
-        await send_log(interaction.guild, "🥾 Expulsion", f"{member.mention} expulsé par {interaction.user.mention} pour : {reason}")
-    else:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-
-@bot.tree.command(name="mute", description="Rendre muet un membre temporairement")
-@app_commands.describe(member="Membre à mute", duration="Durée en secondes", reason="Raison")
-async def mute(interaction: discord.Interaction, member: discord.Member, duration: int, reason: str = "Aucune raison"):
-    if interaction.user.guild_permissions.moderate_members:
-        await member.timeout(duration=datetime.timedelta(seconds=duration), reason=reason)
-        await interaction.response.send_message(f"{member.mention} a été mute pendant {duration} secondes.", ephemeral=True)
-    else:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-
-@bot.tree.command(name="unmute", description="Unmute un membre")
-@app_commands.describe(member="Membre à unmute")
-async def unmute(interaction: discord.Interaction, member: discord.Member):
-    if interaction.user.guild_permissions.moderate_members:
-        await member.timeout(None)
-        await interaction.response.send_message(f"{member.mention} a été unmute.", ephemeral=True)
-    else:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-
-@bot.tree.command(name="clear", description="Supprimer des messages")
-@app_commands.describe(amount="Nombre de messages à supprimer")
-async def clear(interaction: discord.Interaction, amount: int):
-    if interaction.user.guild_permissions.manage_messages:
-        deleted = await interaction.channel.purge(limit=amount)
-        await interaction.response.send_message(f"{len(deleted)} messages supprimés.", ephemeral=True)
-    else:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-
-# --- Lancer le bot ---
-bot.run("MTM2NTcwOTU1MTU0NTg3NjU0MA.GQDSFZ.-sAXnp31-vjnxWnVRF5AP-V3Rmfk5XaGDvmSJA")
+# Lancement du bot
+bot.run('MTM2NTcwOTU1MTU0NTg3NjU0MA.GQDSFZ.-sAXnp31-vjnxWnVRF5AP-V3Rmfk5XaGDvmSJA')
