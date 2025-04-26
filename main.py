@@ -17,7 +17,7 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="/", intents=intents)
 
-# Chargement et sauvegarde de la configuration des vocaux temporaires
+# --- Chargement/Sauvegarde Configs ---
 def load_vocal_channel():
     try:
         with open("vocal_channel_config.json", "r") as f:
@@ -32,17 +32,9 @@ def save_vocal_channel(channel_id):
 
 CREATE_VOCAL_CHANNEL_ID = load_vocal_channel()
 
-# Configurations
-ticket_config = {
-    "category_id": None,
-    "support_role_id": None
-}
+ticket_config = {"category_id": None, "support_role_id": None}
+log_config = {"logs_channel_id": None}
 
-log_config = {
-    "logs_channel_id": None
-}
-
-# Chargement et sauvegarde des warns
 def load_warns():
     try:
         with open("warns.json", "r") as f:
@@ -56,23 +48,14 @@ def save_warns(warns):
 
 warns_data = load_warns()
 
-# --- Fonctions Utiles ---
+# --- Logs ---
 async def send_log(guild, title: str, description: str, color=discord.Color.blurple()):
     if log_config["logs_channel_id"]:
         logs_channel = guild.get_channel(log_config["logs_channel_id"])
         if logs_channel:
-            embed = discord.Embed(
-                title=title,
-                description=description,
-                color=color,
-                timestamp=datetime.datetime.utcnow()
-            )
+            embed = discord.Embed(title=title, description=description, color=color, timestamp=datetime.datetime.utcnow())
             embed.set_footer(text="Système de logs")
             await logs_channel.send(embed=embed)
-        else:
-            print("Erreur : Le salon des logs n'a pas été trouvé.")
-    else:
-        print("Erreur : Aucun salon de logs configuré.")
 
 # --- Système de Tickets ---
 class CloseTicketView(View):
@@ -82,7 +65,7 @@ class CloseTicketView(View):
     @discord.ui.button(label="Fermer le ticket", style=discord.ButtonStyle.danger)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.channel.name.startswith("ticket-"):
-            await send_log(interaction.guild, "🎟️ Fermeture de ticket", f"Ticket **{interaction.channel.name}** fermé par {interaction.user.mention}", color=discord.Color.red())
+            await send_log(interaction.guild, "🎟️ Fermeture de ticket", f"Ticket {interaction.channel.name} fermé par {interaction.user.mention}", color=discord.Color.red())
             await interaction.channel.delete()
         else:
             await interaction.response.send_message("Ceci n'est pas un ticket.", ephemeral=True)
@@ -110,11 +93,12 @@ async def open_ticket(interaction: discord.Interaction):
         interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
         interaction.guild.get_role(ticket_config["support_role_id"]): discord.PermissionOverwrite(read_messages=True, send_messages=True)
     }
+
     ticket_channel = await category.create_text_channel(name=f"ticket-{interaction.user.name}", overwrites=overwrites)
 
     embed = discord.Embed(
-        title="🎛️ Ticket de Support",
-        description=f"Bonjour {interaction.user.mention}, un membre de notre équipe va bientôt vous aider.\n\nUtilisez le bouton ci-dessous pour **fermer** votre ticket lorsque votre problème est résolu.",
+        title="🌛 Ticket de Support",
+        description=f"Bonjour {interaction.user.mention}, un membre va bientôt vous aider.\nUtilisez le bouton pour fermer votre ticket.",
         color=discord.Color.blurple()
     )
     embed.set_footer(text="Système de tickets")
@@ -122,10 +106,10 @@ async def open_ticket(interaction: discord.Interaction):
     view = CloseTicketView()
     await ticket_channel.send(embed=embed, view=view)
 
-    await send_log(interaction.guild, "🎛️ Création de ticket", f"Ticket **{ticket_channel.name}** créé par {interaction.user.mention}", color=discord.Color.green())
+    await send_log(interaction.guild, "🌛 Nouveau Ticket", f"Ticket {ticket_channel.name} créé par {interaction.user.mention}", color=discord.Color.green())
     await interaction.response.send_message(f"Votre ticket a été créé : {ticket_channel.mention}", ephemeral=True)
 
-# --- Gestion des Vocaux Temporaires ---
+# --- Vocaux Temporaires ---
 @bot.event
 async def on_voice_state_update(member, before, after):
     if CREATE_VOCAL_CHANNEL_ID is None:
@@ -135,77 +119,68 @@ async def on_voice_state_update(member, before, after):
         await create_temp_voice_channel(member)
 
 async def create_temp_voice_channel(member):
-    if CREATE_VOCAL_CHANNEL_ID is None:
-        return
-
     guild = member.guild
     create_channel = guild.get_channel(CREATE_VOCAL_CHANNEL_ID)
     if not create_channel:
         return
 
     category = create_channel.category
-    if not category:
-        return
-
-    new_channel = await guild.create_voice_channel(
-        name=f"Salon de {member.display_name}",
-        category=category,
-        user_limit=5
-    )
-
+    new_channel = await guild.create_voice_channel(name=f"Salon de {member.display_name}", category=category, user_limit=5)
     await member.move_to(new_channel)
 
-    def check_empty_channel(m, before, after):
-        return before.channel == new_channel and after.channel is None and len(new_channel.members) == 0
+    def check_empty_channel(m, b, a):
+        return b.channel == new_channel and a.channel is None and len(new_channel.members) == 0
 
     try:
         await bot.wait_for('voice_state_update', check=check_empty_channel, timeout=300)
         await new_channel.delete()
     except asyncio.TimeoutError:
-        print(f"Timeout : Le salon {new_channel.name} n'a pas été vidé en 5 minutes. Suppression.")
         await new_channel.delete()
 
-# --- Commandes de Modération ---
-@bot.tree.command(name="mute", description="Mute un membre")
-@app_commands.describe(member="Membre à mute")
-async def mute(interaction: discord.Interaction, member: discord.Member):
-    if not interaction.user.guild_permissions.moderate_members:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+# --- Commandes de Setup ---
+@bot.tree.command(name="setup-vocaux", description="Configurer le salon pour créer les vocaux temporaires.")
+@app_commands.describe(channel="Salon vocal")
+async def setup_vocaux(interaction: discord.Interaction, channel: discord.VoiceChannel):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Tu dois être administrateur.", ephemeral=True)
         return
-    await member.edit(mute=True)
-    await interaction.response.send_message(f"{member.mention} a été mis en sourdine.", ephemeral=True)
-    await send_log(interaction.guild, "🔇 Mute", f"{member.mention} muet par {interaction.user.mention}", color=discord.Color.orange())
 
-@bot.tree.command(name="unmute", description="Démute un membre")
-@app_commands.describe(member="Membre à démute")
-async def unmute(interaction: discord.Interaction, member: discord.Member):
-    if not interaction.user.guild_permissions.moderate_members:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+    save_vocal_channel(channel.id)
+    global CREATE_VOCAL_CHANNEL_ID
+    CREATE_VOCAL_CHANNEL_ID = channel.id
+    await interaction.response.send_message(f"Salon de création de vocaux configuré : {channel.mention}", ephemeral=True)
+
+@bot.tree.command(name="setup-logs", description="Configurer le salon où les logs seront envoyés.")
+@app_commands.describe(channel="Salon de logs")
+async def setup_logs(interaction: discord.Interaction, channel: discord.TextChannel):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Tu dois être administrateur.", ephemeral=True)
         return
-    await member.edit(mute=False)
-    await interaction.response.send_message(f"{member.mention} a été démute.", ephemeral=True)
-    await send_log(interaction.guild, "🔊 Unmute", f"{member.mention} démute par {interaction.user.mention}", color=discord.Color.green())
 
-@bot.tree.command(name="kick", description="Expulse un membre")
-@app_commands.describe(member="Membre à expulser", reason="Raison de l'expulsion")
-async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "Aucune raison"):
-    if not interaction.user.guild_permissions.kick_members:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+    log_config["logs_channel_id"] = channel.id
+    await interaction.response.send_message(f"Salon de logs configuré : {channel.mention}", ephemeral=True)
+
+@bot.tree.command(name="setup-tickets", description="Configurer la catégorie et le rôle pour les tickets.")
+@app_commands.describe(category="Catégorie pour les tickets", role="Rôle support")
+async def setup_tickets(interaction: discord.Interaction, category: discord.CategoryChannel, role: discord.Role):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Tu dois être administrateur.", ephemeral=True)
         return
-    await member.kick(reason=reason)
-    await interaction.response.send_message(f"{member.mention} a été expulsé.", ephemeral=True)
-    await send_log(interaction.guild, "👢 Expulsion", f"{member.mention} expulsé par {interaction.user.mention} pour : {reason}", color=discord.Color.red())
 
-@bot.tree.command(name="ban", description="Bannir un membre")
-@app_commands.describe(member="Membre à bannir", reason="Raison du bannissement")
-async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "Aucune raison"):
-    if not interaction.user.guild_permissions.ban_members:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-        return
-    await member.ban(reason=reason)
-    await interaction.response.send_message(f"{member.mention} a été banni.", ephemeral=True)
-    await send_log(interaction.guild, "🔨 Bannissement", f"{member.mention} banni par {interaction.user.mention} pour : {reason}", color=discord.Color.red())
+    ticket_config["category_id"] = category.id
+    ticket_config["support_role_id"] = role.id
+    await interaction.response.send_message(f"Tickets configurés dans {category.name} avec {role.mention}.", ephemeral=True)
 
-# --- Lancement du Bot ---
-# NE JAMAIS METTRE TON TOKEN EN CLAIR !!
-bot.run(os.getenv("TOKEN"))
+# --- Event Ready ---
+@bot.event
+async def on_ready():
+    await bot.tree.sync()
+    print(f"Connecté en tant que {bot.user} ✅")
+
+# --- Lancement Bot ---
+if __name__ == "__main__":
+    TOKEN = os.getenv("TOKEN")
+    if not TOKEN:
+        print("Erreur: Token introuvable. As-tu mis la variable TOKEN dans Railway ?")
+    else:
+        bot.run(TOKEN)
