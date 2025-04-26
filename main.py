@@ -145,9 +145,13 @@ async def create_temp_voice_channel(member):
     def check_empty_channel(before, after):
         return before.channel == new_channel and after.channel is None and len(new_channel.members) == 0
 
-    # Attendre que le salon soit vide
-    await bot.wait_for('voice_state_update', check=check_empty_channel)
-    await new_channel.delete()
+    # Attendre que le salon soit vide mais avec un timeout de 5 minutes pour éviter un blocage
+    try:
+        await bot.wait_for('voice_state_update', check=check_empty_channel, timeout=300)
+        await new_channel.delete()
+    except asyncio.TimeoutError:
+        print(f"Le salon vocal {new_channel.name} n'a pas été vidé dans les 5 minutes. Suppression forcée.")
+        await new_channel.delete()
 
 # --- Commandes de Modération ---
 @bot.tree.command(name="mute", description="Muet un membre")
@@ -189,37 +193,6 @@ async def ban(interaction: discord.Interaction, member: discord.Member, reason: 
         await send_log(interaction.guild, "🔨 Bannissement", f"{member.mention} banni par {interaction.user.mention} pour : {reason}", color=discord.Color.red())
     else:
         await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-
-# --- Commandes de Configuration des Logs et Tickets ---
-@bot.tree.command(name="config", description="Configurer le système de tickets")
-@app_commands.describe(category="Catégorie pour les tickets", support_role="Rôle support")
-async def config(interaction: discord.Interaction, category: discord.CategoryChannel, support_role: discord.Role):
-    if interaction.user.guild_permissions.administrator:
-        ticket_config["category_id"] = category.id
-        ticket_config["support_role_id"] = support_role.id
-        await interaction.response.send_message("Configuration mise à jour avec succès !", ephemeral=True)
-    else:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-
-@bot.tree.command(name="config-logs", description="Configurer le salon de logs")
-@app_commands.describe(channel="Salon de logs")
-async def config_logs(interaction: discord.Interaction, channel: discord.TextChannel):
-    if interaction.user.guild_permissions.administrator:
-        log_config["logs_channel_id"] = channel.id
-        await interaction.response.send_message(f"Salon de logs configuré : {channel.mention}", ephemeral=True)
-    else:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-
-@bot.tree.command(name="ticket", description="Créer un ticket manuellement")
-async def ticket(interaction: discord.Interaction):
-    await open_ticket(interaction)
-
-@bot.tree.command(name="setup-ticket", description="Envoyer un panneau pour créer des tickets")
-@app_commands.describe(channel="Salon", message="Message personnalisé")
-async def setup_ticket(interaction: discord.Interaction, channel: discord.TextChannel, message: str):
-    view = CreateTicketView()
-    await channel.send(message, view=view)
-    await interaction.response.send_message(f"Panneau de ticket envoyé dans {channel.mention}", ephemeral=True)
 
 # Lancement du bot
 bot.run('MTM2NTcwOTU1MTU0NTg3NjU0MA.GQDSFZ.-sAXnp31-vjnxWnVRF5AP-V3Rmfk5XaGDvmSJA')
