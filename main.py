@@ -2,8 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from discord.ui import View, Button
-from vocaux_temp import setup
 import datetime
+import json
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -11,12 +11,24 @@ intents.guilds = True
 intents.message_content = True
 intents.members = True
 intents.presences = True
-intents.message_content = True
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="/", intents=intents)
 
-setup(bot)
+# Chargement et sauvegarde de la configuration des vocaux temporaires
+def load_vocal_channel():
+    try:
+        with open("vocal_channel_config.json", "r") as f:
+            config = json.load(f)
+            return config.get("vocal_channel_id", None)
+    except FileNotFoundError:
+        return None
+
+def save_vocal_channel(channel_id):
+    with open("vocal_channel_config.json", "w") as f:
+        json.dump({"vocal_channel_id": channel_id}, f)
+
+CREATE_VOCAL_CHANNEL_ID = load_vocal_channel()
 
 # Configurations
 ticket_config = {
@@ -96,6 +108,47 @@ async def on_ready():
     await bot.tree.sync()
     print(f"Connecté en tant que {bot.user}")
 
+# Configuration des vocaux temporaires
+@bot.tree.command(name="setup-vocaux", description="Configurer le salon de création des vocaux temporaires")
+@app_commands.describe(channel="Salon texte pour la création des vocaux temporaires")
+async def setup_vocaux(interaction: discord.Interaction, channel: discord.TextChannel):
+    """Configure le salon où les utilisateurs créeront des vocaux temporaires."""
+    global CREATE_VOCAL_CHANNEL_ID
+    CREATE_VOCAL_CHANNEL_ID = channel.id
+    save_vocal_channel(CREATE_VOCAL_CHANNEL_ID)
+    await interaction.response.send_message(f"Le salon de création des vocaux temporaires est maintenant {channel.mention}.", ephemeral=True)
+
+# Fonction pour créer un salon vocal temporaire
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if not CREATE_VOCAL_CHANNEL_ID:
+        return  # Si le salon n'est pas configuré, on ne fait rien
+
+    if after.channel and after.channel.id == CREATE_VOCAL_CHANNEL_ID:
+        await create_temp_voice_channel(member)
+
+async def create_temp_voice_channel(member):
+    guild = member.guild
+    category = member.guild.get_channel(CREATE_VOCAL_CHANNEL_ID).category  # Même catégorie que "Créer un vocal"
+
+    # Crée un nouveau salon vocal privé
+    new_channel = await guild.create_voice_channel(
+        name=f"Salon de {member.display_name}",
+        category=category,
+        user_limit=5  # Tu peux ajuster la limite du nombre de personnes ici
+    )
+
+    # Déplace l'utilisateur dans le nouveau salon
+    await member.move_to(new_channel)
+
+    # Attendre que le salon soit vide pour le supprimer
+    def check_empty_channel(before, after):
+        return before.channel == new_channel and after.channel is None and len(new_channel.members) == 0
+
+    await bot.wait_for('voice_state_update', check=check_empty_channel)
+    await new_channel.delete()
+
+# Commandes existantes
 @bot.tree.command(name="config", description="Configurer le système de tickets")
 @app_commands.describe(category="Catégorie pour les tickets", support_role="Rôle support")
 async def config(interaction: discord.Interaction, category: discord.CategoryChannel, support_role: discord.Role):
@@ -166,31 +219,5 @@ async def send(interaction: discord.Interaction, channel: discord.TextChannel, m
     else:
         await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
 
-# --- Événements ---
-
-@bot.event
-async def on_message_edit(before, after):
-    if before.author.bot:
-        return
-    if before.content != after.content:
-        await send_log(
-            before.guild,
-            "✏️ Message édité",
-            f"**Auteur :** {before.author.mention}\n**Salon :** {before.channel.mention}\n\n**Avant :** `{before.content}`\n**Après :** `{after.content}`",
-            color=discord.Color.yellow()
-        )
-
-@bot.event
-async def on_message_delete(message):
-    if message.author.bot:
-        return
-    await send_log(
-        message.guild,
-        "🗑️ Message supprimé",
-        f"**Auteur :** {message.author.mention}\n**Salon :** {message.channel.mention}\n\n**Contenu :** `{message.content}`",
-        color=discord.Color.dark_red()
-    )
-
 # --- Lancer le bot ---
-
-bot.run("MTM2NTcwOTU1MTU0NTg3NjU0MA.GQDSFZ.-sAXnp31-vjnxWnVRF5AP-V3Rmfk5XaGDvmSJA")
+bot.run("TON_TOKEN_ICI")  # Remplace par ton vrai token
