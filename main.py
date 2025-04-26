@@ -110,13 +110,13 @@ async def on_ready():
 
 # Configuration des vocaux temporaires
 @bot.tree.command(name="setup-vocaux", description="Configurer le salon de création des vocaux temporaires")
-@app_commands.describe(channel="Salon texte pour la création des vocaux temporaires")
-async def setup_vocaux(interaction: discord.Interaction, channel: discord.TextChannel):
+@app_commands.describe(channel="Salon vocal pour la création des vocaux temporaires")
+async def setup_vocaux(interaction: discord.Interaction, channel: discord.VoiceChannel):
     """Configure le salon où les utilisateurs créeront des vocaux temporaires."""
     global CREATE_VOCAL_CHANNEL_ID
     CREATE_VOCAL_CHANNEL_ID = channel.id
     save_vocal_channel(CREATE_VOCAL_CHANNEL_ID)
-    await interaction.response.send_message(f"Le salon de création des vocaux temporaires est maintenant {channel.mention}.", ephemeral=True)
+    await interaction.response.send_message(f"Le salon vocal de création des vocaux temporaires est maintenant {channel.mention}.", ephemeral=True)
 
 # Fonction pour créer un salon vocal temporaire
 @bot.event
@@ -187,35 +187,6 @@ async def setup_ticket(interaction: discord.Interaction, channel: discord.TextCh
 
         await channel.send(embed=embed, view=view)
         await interaction.response.send_message(f"Panneau envoyé dans {channel.mention} ✅", ephemeral=True)
-    else:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-
-@bot.tree.command(name="ban", description="Bannir un membre")
-@app_commands.describe(user="Membre à bannir", reason="Raison")
-async def ban(interaction: discord.Interaction, user: discord.Member, reason: str = "Aucune raison"):
-    if interaction.user.guild_permissions.ban_members:
-        await user.ban(reason=reason)
-        await interaction.response.send_message(f"{user.mention} a été banni !", ephemeral=True)
-        await send_log(interaction.guild, "🔨 Bannissement", f"{interaction.user.mention} a **banni** {user.mention}\n**Raison :** {reason}", color=discord.Color.red())
-    else:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-
-@bot.tree.command(name="kick", description="Expulser un membre")
-@app_commands.describe(user="Membre à expulser", reason="Raison")
-async def kick(interaction: discord.Interaction, user: discord.Member, reason: str = "Aucune raison"):
-    if interaction.user.guild_permissions.kick_members:
-        await user.kick(reason=reason)
-        await interaction.response.send_message(f"{user.mention} a été expulsé !", ephemeral=True)
-        await send_log(interaction.guild, "👢 Expulsion", f"{interaction.user.mention} a **expulsé** {user.mention}\n**Raison :** {reason}", color=discord.Color.orange())
-    else:
-        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
-
-@bot.tree.command(name="send", description="Envoyer un message personnalisé via le bot")
-@app_commands.describe(channel="Salon cible", message="Message à envoyer")
-async def send(interaction: discord.Interaction, channel: discord.TextChannel, message: str):
-    if interaction.user.guild_permissions.administrator:
-        await channel.send(message)
-        await interaction.response.send_message("Message envoyé !", ephemeral=True)
     else:
         await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
 
