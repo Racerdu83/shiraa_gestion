@@ -5,6 +5,7 @@ from discord.ui import View, Button
 import datetime
 import json
 import asyncio
+import os
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -81,7 +82,7 @@ class CloseTicketView(View):
     @discord.ui.button(label="Fermer le ticket", style=discord.ButtonStyle.danger)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.channel.name.startswith("ticket-"):
-            await send_log(interaction.guild, f"🎟️ Fermeture de ticket", f"Ticket **{interaction.channel.name}** fermé par {interaction.user.mention}", color=discord.Color.red())
+            await send_log(interaction.guild, "🎟️ Fermeture de ticket", f"Ticket **{interaction.channel.name}** fermé par {interaction.user.mention}", color=discord.Color.red())
             await interaction.channel.delete()
         else:
             await interaction.response.send_message("Ceci n'est pas un ticket.", ephemeral=True)
@@ -100,6 +101,10 @@ async def open_ticket(interaction: discord.Interaction):
         return
 
     category = interaction.guild.get_channel(ticket_config["category_id"])
+    if not category:
+        await interaction.response.send_message("La catégorie de tickets est introuvable.", ephemeral=True)
+        return
+
     overwrites = {
         interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
         interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
@@ -117,22 +122,30 @@ async def open_ticket(interaction: discord.Interaction):
     view = CloseTicketView()
     await ticket_channel.send(embed=embed, view=view)
 
-    await send_log(interaction.guild, f"🎛️ Création de ticket", f"Ticket **{ticket_channel.name}** créé par {interaction.user.mention}", color=discord.Color.green())
+    await send_log(interaction.guild, "🎛️ Création de ticket", f"Ticket **{ticket_channel.name}** créé par {interaction.user.mention}", color=discord.Color.green())
     await interaction.response.send_message(f"Votre ticket a été créé : {ticket_channel.mention}", ephemeral=True)
 
 # --- Gestion des Vocaux Temporaires ---
 @bot.event
 async def on_voice_state_update(member, before, after):
-    if not CREATE_VOCAL_CHANNEL_ID:
+    if CREATE_VOCAL_CHANNEL_ID is None:
         return
 
-    # Lorsque l'utilisateur rejoint le salon de création
     if after.channel and after.channel.id == CREATE_VOCAL_CHANNEL_ID:
         await create_temp_voice_channel(member)
 
 async def create_temp_voice_channel(member):
+    if CREATE_VOCAL_CHANNEL_ID is None:
+        return
+
     guild = member.guild
-    category = member.guild.get_channel(CREATE_VOCAL_CHANNEL_ID).category
+    create_channel = guild.get_channel(CREATE_VOCAL_CHANNEL_ID)
+    if not create_channel:
+        return
+
+    category = create_channel.category
+    if not category:
+        return
 
     new_channel = await guild.create_voice_channel(
         name=f"Salon de {member.display_name}",
@@ -142,19 +155,18 @@ async def create_temp_voice_channel(member):
 
     await member.move_to(new_channel)
 
-    def check_empty_channel(before, after):
+    def check_empty_channel(m, before, after):
         return before.channel == new_channel and after.channel is None and len(new_channel.members) == 0
 
-    # Attendre que le salon soit vide mais avec un timeout de 5 minutes pour éviter un blocage
     try:
         await bot.wait_for('voice_state_update', check=check_empty_channel, timeout=300)
         await new_channel.delete()
     except asyncio.TimeoutError:
-        print(f"Le salon vocal {new_channel.name} n'a pas été vidé dans les 5 minutes. Suppression forcée.")
+        print(f"Timeout : Le salon {new_channel.name} n'a pas été vidé en 5 minutes. Suppression.")
         await new_channel.delete()
 
 # --- Commandes de Modération ---
-@bot.tree.command(name="mute", description="Muet un membre")
+@bot.tree.command(name="mute", description="Mute un membre")
 @app_commands.describe(member="Membre à mute")
 async def mute(interaction: discord.Interaction, member: discord.Member):
     if not interaction.user.guild_permissions.moderate_members:
@@ -162,7 +174,7 @@ async def mute(interaction: discord.Interaction, member: discord.Member):
         return
     await member.edit(mute=True)
     await interaction.response.send_message(f"{member.mention} a été mis en sourdine.", ephemeral=True)
-    await send_log(interaction.guild, "🔇 Mute", f"{member.mention} a été muet par {interaction.user.mention}", color=discord.Color.orange())
+    await send_log(interaction.guild, "🔇 Mute", f"{member.mention} muet par {interaction.user.mention}", color=discord.Color.orange())
 
 @bot.tree.command(name="unmute", description="Démute un membre")
 @app_commands.describe(member="Membre à démute")
@@ -172,27 +184,28 @@ async def unmute(interaction: discord.Interaction, member: discord.Member):
         return
     await member.edit(mute=False)
     await interaction.response.send_message(f"{member.mention} a été démute.", ephemeral=True)
-    await send_log(interaction.guild, "🔊 Unmute", f"{member.mention} a été démute par {interaction.user.mention}", color=discord.Color.green())
+    await send_log(interaction.guild, "🔊 Unmute", f"{member.mention} démute par {interaction.user.mention}", color=discord.Color.green())
 
 @bot.tree.command(name="kick", description="Expulse un membre")
 @app_commands.describe(member="Membre à expulser", reason="Raison de l'expulsion")
 async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "Aucune raison"):
-    if interaction.user.guild_permissions.kick_members:
-        await member.kick(reason=reason)
-        await interaction.response.send_message(f"{member.mention} a été expulsé.", ephemeral=True)
-        await send_log(interaction.guild, "👢 Expulsion", f"{member.mention} expulsé par {interaction.user.mention} pour : {reason}", color=discord.Color.red())
-    else:
+    if not interaction.user.guild_permissions.kick_members:
         await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+        return
+    await member.kick(reason=reason)
+    await interaction.response.send_message(f"{member.mention} a été expulsé.", ephemeral=True)
+    await send_log(interaction.guild, "👢 Expulsion", f"{member.mention} expulsé par {interaction.user.mention} pour : {reason}", color=discord.Color.red())
 
 @bot.tree.command(name="ban", description="Bannir un membre")
 @app_commands.describe(member="Membre à bannir", reason="Raison du bannissement")
 async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "Aucune raison"):
-    if interaction.user.guild_permissions.ban_members:
-        await member.ban(reason=reason)
-        await interaction.response.send_message(f"{member.mention} a été banni.", ephemeral=True)
-        await send_log(interaction.guild, "🔨 Bannissement", f"{member.mention} banni par {interaction.user.mention} pour : {reason}", color=discord.Color.red())
-    else:
+    if not interaction.user.guild_permissions.ban_members:
         await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+        return
+    await member.ban(reason=reason)
+    await interaction.response.send_message(f"{member.mention} a été banni.", ephemeral=True)
+    await send_log(interaction.guild, "🔨 Bannissement", f"{member.mention} banni par {interaction.user.mention} pour : {reason}", color=discord.Color.red())
 
-# Lancement du bot
-bot.run("MTM2NTcwOTU1MTU0NTg3NjU0MA.GQDSFZ.-sAXnp31-vjnxWnVRF5AP-V3Rmfk5XaGDvmSJA")
+# --- Lancement du Bot ---
+# NE JAMAIS METTRE TON TOKEN EN CLAIR !!
+bot.run(os.getenv("TOKEN"))
