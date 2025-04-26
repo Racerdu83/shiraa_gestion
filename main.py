@@ -220,4 +220,4 @@ async def send(interaction: discord.Interaction, channel: discord.TextChannel, m
         await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
 
 # --- Lancer le bot ---
-bot.run("TON_TOKEN_ICI")  # Remplace par ton vrai token
+bot.run("MTM2NTcwOTU1MTU0NTg3NjU0MA.GQDSFZ.-sAXnp31-vjnxWnVRF5AP-V3Rmfk5XaGDvmSJA")  # Remplace par ton vrai token
