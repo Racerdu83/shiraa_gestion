@@ -195,4 +195,4 @@ async def ban(interaction: discord.Interaction, member: discord.Member, reason: 
         await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
 
 # Lancement du bot
-bot.run('MTM2NTcwOTU1MTU0NTg3NjU0MA.GQDSFZ.-sAXnp31-vjnxWnVRF5AP-V3Rmfk5XaGDvmSJA')
+bot.run("MTM2NTcwOTU1MTU0NTg3NjU0MA.GQDSFZ.-sAXnp31-vjnxWnVRF5AP-V3Rmfk5XaGDvmSJA")
