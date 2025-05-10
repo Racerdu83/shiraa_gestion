@@ -237,6 +237,89 @@ async def ban(interaction: discord.Interaction, member: discord.Member, reason: 
     await member.ban(reason=reason)
     await send_log(interaction.guild, "🔨 Ban", f"{member.mention} banni par {interaction.user.mention} pour: {reason}")
     await interaction.response.send_message(f"{member.mention} a été banni.")
+    # --- WARN SYSTEM --- (stockage dans un salon texte unique)
+
+@bot.tree.command(name="warn", description="Avertir un membre")
+async def warn(interaction: discord.Interaction, member: discord.Member, reason: str = "Non spécifiée"):
+    if not interaction.user.guild_permissions.moderate_members:
+        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+        return
+
+    guild = interaction.guild
+    category_id = 1370696386785443843
+    category = guild.get_channel(category_id)
+
+    if not category:
+        await interaction.response.send_message("Catégorie de stockage introuvable.", ephemeral=True)
+        return
+
+    # Vérifie ou crée le salon "warn-logs"
+    warn_log_channel = discord.utils.get(category.text_channels, name="warn-logs")
+    if not warn_log_channel:
+        warn_log_channel = await guild.create_text_channel(
+            name="warn-logs",
+            category=category,
+            overwrites={
+                guild.default_role: discord.PermissionOverwrite(read_messages=False)
+            }
+        )
+
+    embed = discord.Embed(
+        title="⚠️ Avertissement",
+        description=f"**Membre :** {member.mention} ({member.id})\n"
+                    f"**Modérateur :** {interaction.user.mention}\n"
+                    f"**Raison :** {reason}",
+        color=discord.Color.orange(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    await warn_log_channel.send(embed=embed)
+    await interaction.response.send_message(f"{member.mention} a été averti pour : {reason}", ephemeral=True)
+
+@bot.tree.command(name="warns", description="Voir les avertissements d'un membre")
+async def warns(interaction: discord.Interaction, member: discord.Member):
+    if not interaction.user.guild_permissions.moderate_members:
+        await interaction.response.send_message("Tu n'as pas la permission.", ephemeral=True)
+        return
+
+    guild = interaction.guild
+    category = guild.get_channel(1370696386785443843)
+    if not category:
+        await interaction.response.send_message("Catégorie de stockage introuvable.", ephemeral=True)
+        return
+
+    warn_log_channel = discord.utils.get(category.text_channels, name="warn-logs")
+    if not warn_log_channel:
+        await interaction.response.send_message("Aucun avertissement trouvé pour ce membre.", ephemeral=True)
+        return
+
+    # Récupérer les messages du salon et filtrer ceux concernant le membre
+    messages = [msg async for msg in warn_log_channel.history(limit=100)]
+    warns = []
+
+    for msg in messages:
+        if msg.embeds:
+            embed = msg.embeds[0]
+            if f"{member.id}" in embed.description:
+                warns.append(embed)
+
+    if not warns:
+        await interaction.response.send_message(f"Aucun avertissement trouvé pour {member.mention}.", ephemeral=True)
+        return
+
+    response = ""
+    for i, warn in enumerate(warns[:5], start=1):  # Affiche jusqu'à 5 warns
+        mod = next((line for line in warn.description.split('\n') if "Modérateur" in line), "Modérateur inconnu")
+        reason = next((line for line in warn.description.split('\n') if "Raison" in line), "Raison inconnue")
+        response += f"**{i}.** {mod}\n{reason}\n\n"
+
+    await interaction.response.send_message(
+        embed=discord.Embed(
+            title=f"📄 Avertissements pour {member}",
+            description=response,
+            color=discord.Color.orange()
+        ),
+        ephemeral=True
+    )
 
 # --- LANCEMENT ---
 
