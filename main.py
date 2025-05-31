@@ -4,7 +4,7 @@ from discord import app_commands
 from discord.ui import View, Button
 import datetime
 import asyncio
-import os
+import os  # déjà présent
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -16,6 +16,7 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="/", intents=intents)
 
+# Garde les autres valeurs en dur
 DATABASE_GUILD_ID = 1310729822204465152
 STORAGE_CHANNELS = {
     "warns": "warns",
@@ -23,7 +24,6 @@ STORAGE_CHANNELS = {
     "logs": "config-logs",
     "tickets": "config-tickets"
 }
-
 async def get_storage_channel(name: str):
     db_guild = bot.get_guild(DATABASE_GUILD_ID)
     if not db_guild:
@@ -242,4 +242,10 @@ async def ban(interaction: discord.Interaction, member: discord.Member, reason: 
     await send_log(interaction.guild, "🔨 Ban", f"{member.mention} banni pour : {reason}")
     await interaction.response.send_message(f"{member.mention} a été banni.")
 
-bot.run(os.getenv("TOKEN"))
+# Lancement du bot avec le token depuis variable d’environnement
+TOKEN = os.getenv("TOKEN")
+if not TOKEN:
+    print("Erreur : la variable d'environnement TOKEN n'est pas définie.")
+    exit(1)
+
+bot.run(TOKEN)
